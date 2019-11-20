@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
 	"strconv"
 )
@@ -19,41 +20,47 @@ func main() {
 		panic(err.Error())
 	}
 }
+/*sliceForGraffiti - слайс, который требуется для корректного, красивого вывода графики.
+По лежащим в нем булевым значениям функция printGraffiti определяет, где выводить "│	", а где просто "	",
+где выводить "├───", а где выводить "└───" .
+В слайсе хранится true, если текущий рассматриваемый файл или папка является последним в текущей директории
+т.е. является последним элементом слайса dirs или files.
+Логика этого механизма тяжело продумана и не рекомендуется для внесения изменений.*/
 
+//выводит дерево каталога в отсортированном по имени виде (сначала выводятся подпапки, а потом подфайлы)
 func dirTree(out io.Writer, path string, printFiles bool, sliceForGraffiti []bool) (err error) {
-	dirsAndFiles, err := ioutil.ReadDir(path) //инфа по содержимому в папке
+	dirsAndFiles, err := ioutil.ReadDir(path) //инфа по содержимому в текущей папке (получаемый слайс - уже в отсортированном по имени виде)
 	if err != nil {
 		return err
 	}
 	var dirs []string //сюда заносим названия папок в директории Path
 	var files []string //сюда заносим названия файлов в директории Path
-	for _, file := range dirsAndFiles { //перебор содержимого папки
+	for _, file := range dirsAndFiles { //перебор содержимого текущей папки
 		if file.IsDir() {
 			dirs = append(dirs, file.Name())
-		} else {
+		} else { //если это файл, а не папка
 			files = append(files, file.Name()+" ("+strconv.Itoa(int(file.Size()))+"b)")
 		}
 	}
+	//обработка печати папок (не файлов)
 	for i, dirName := range dirs {
 		if i == len(dirs)-1 {
 			sliceForGraffiti = append(sliceForGraffiti, true)
 		} else {
 			sliceForGraffiti = append(sliceForGraffiti, false)
 		}
-		if printFiles {
+		if printFiles { //нужно для ключа -f
 			if len(files) > 0 {
 				sliceForGraffiti[len(sliceForGraffiti)-1] = false
 			}
 		}
-		if err := printGraffiti(out, path, dirName, sliceForGraffiti); err != nil {
-			return err
-		}
-		if err := dirTree(out, path+"/"+dirName, printFiles, sliceForGraffiti); err != nil {
+		printGraffiti(out, dirName, sliceForGraffiti)
+		if err := dirTree(out, path+"/"+dirName, printFiles, sliceForGraffiti); err != nil { //рекурсивный вызов (переход в следующую папку текущей директории)
 			return err
 		}
 		sliceForGraffiti = sliceForGraffiti[:len(sliceForGraffiti)-1]
 	}
-	//обработка печати файлов
+	//обработка печати файлов и их размеров (не папок)
 	if printFiles {
 		for i, filesName := range files {
 			if i == len(files) - 1 {
@@ -61,16 +68,15 @@ func dirTree(out io.Writer, path string, printFiles bool, sliceForGraffiti []boo
 			} else {
 				sliceForGraffiti = append(sliceForGraffiti, false)
 			}
-			if err := printGraffiti(out, path, filesName, sliceForGraffiti); err != nil {
-				return err
-			}
+			printGraffiti(out, filesName, sliceForGraffiti)
 			sliceForGraffiti = sliceForGraffiti[:len(sliceForGraffiti)-1]
 		}
 	}
 	return nil
 }
 
-func printGraffiti(out io.Writer, path string, dirName string, sliceForGraffiti []bool) (err error) {
+//отвечает за печать графики
+func printGraffiti(out io.Writer, dirOrFileName string, sliceForGraffiti []bool) {
 	var str string
 	for i := 0; i < len(sliceForGraffiti)-1; i++ {
 		if sliceForGraffiti[i] == false {
@@ -84,8 +90,7 @@ func printGraffiti(out io.Writer, path string, dirName string, sliceForGraffiti 
 	} else {
 		str += "└─── "
 	}
-	if _, err := fmt.Fprintf(out, "%s\n", str+dirName); err != nil {
-		return err
+	if _, err := fmt.Fprintf(out, "%s\n", str+dirOrFileName); err != nil {
+		log.Fatalf("Can't drow graffiti ", err.Error())
 	}
-	return nil
 }
